@@ -87,6 +87,16 @@ main.obj: ../Motor.h
 main.obj: ../Clock.h
 main.obj: ../Tachometer.h
 main.obj: ../opt3101.h
+main.obj: ../I2CB1.h
+main.obj: ../CortexM.h
+main.obj: ../LPF.h
+main.obj: ../LaunchPad.h
+main.obj: ../Bump.h
+main.obj: ../FFT.h
+main.obj: C:/ti/ccs1260/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/math.h
+main.obj: C:/ti/ccs1260/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/_defs.h
+main.obj: C:/ti/ccs1260/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/machine/_limits.h
+main.obj: C:/ti/ccs1260/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/stdlib.h
 
 ../main.c:
 
@@ -261,4 +271,24 @@ C:/Users/LucasTroy/OneDrive\ -\ University\ of\ Pittsburgh/Classes\ 2024/Cyber\ 
 ../Tachometer.h:
 
 ../opt3101.h:
+
+../I2CB1.h:
+
+../CortexM.h:
+
+../LPF.h:
+
+../LaunchPad.h:
+
+../Bump.h:
+
+../FFT.h:
+
+C:/ti/ccs1260/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/math.h:
+
+C:/ti/ccs1260/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/_defs.h:
+
+C:/ti/ccs1260/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/machine/_limits.h:
+
+C:/ti/ccs1260/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/stdlib.h:
 

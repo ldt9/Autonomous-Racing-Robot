@@ -101,4 +101,6 @@ void Tachometer_Init(void);
 void Tachometer_Get(uint16_t *leftTach, enum TachDirection *leftDir, int32_t *leftSteps,
                     uint16_t *rightTach, enum TachDirection *rightDir, int32_t *rightSteps);
 
+uint16_t avg(uint16_t *array, int length);
+
 #endif /* TACHOMETER_H_ */
