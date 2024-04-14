@@ -449,41 +449,6 @@ int main(int argc, char** argv)
     OPT3101_StartMeasurementChannel(channel);
     StartTime = SysTick->VAL;
 
-    // Comment this stuff out because they are built with same timers as motors
-//    /* GPIO Setup for Pins 2.0-2.2 */
-//    MAP_PMAP_configurePorts((const uint8_t *) port_mapping, PMAP_P2MAP, 1,
-//        PMAP_DISABLE_RECONFIGURATION);
-//
-//    MAP_GPIO_setAsPeripheralModuleFunctionOutputPin(GPIO_PORT_P2,
-//        GPIO_PIN0 | GPIO_PIN1 | GPIO_PIN2, GPIO_PRIMARY_MODULE_FUNCTION);
-//
-//    /* Configuring P1.1 & P1.4 as an input and enabling interrupts */
-//    GPIO_setAsInputPinWithPullUpResistor(GPIO_PORT_P1, GPIO_PIN1 | GPIO_PIN4);
-//    GPIO_clearInterruptFlag(GPIO_PORT_P1, GPIO_PIN1 | GPIO_PIN4);
-//    GPIO_enableInterrupt(GPIO_PORT_P1, GPIO_PIN1 | GPIO_PIN4);
-//    GPIO_interruptEdgeSelect(GPIO_PORT_P1, GPIO_PIN1 | GPIO_PIN4, GPIO_HIGH_TO_LOW_TRANSITION);
-//    GPIO_clearInterruptFlag(GPIO_PORT_P1, GPIO_PIN1 | GPIO_PIN4);
-//
-//    GPIO_setOutputLowOnPin(GPIO_PORT_P1, GPIO_PIN0);
-//    GPIO_setAsOutputPin(GPIO_PORT_P1, GPIO_PIN0);
-//
-//    /* Configure TimerA0 for RGB LED*/
-//    TA0CCR0 = PWM_PERIOD;                   // PWM Period
-//    TA0CCTL1 = OUTMOD_7;                    // CCR1 reset/set
-//    TA0CCR1 = PWM_PERIOD * (0/255);                 // CCR1 PWM duty cycle
-//    TA0CCTL2 = OUTMOD_7;                    // CCR2 reset/set
-//    TA0CCR2 = PWM_PERIOD * (0/255);                 // CCR2 PWM duty cycle
-//    TA0CCTL3 = OUTMOD_7;                    // CCR3 reset/set
-//    TA0CCR3 = PWM_PERIOD * (0/255);                 // CCR3 PWM duty cycle
-//    TA0CTL = TASSEL__SMCLK | MC__UP | TACLR;  // SMCLK, up mode, clear TAR
-//
-//    /* Configuring TimerA1 for Up Mode */
-//    Timer_A_configureUpMode(TIMER_A1_BASE, &upConfig);
-//
-//    Interrupt_enableInterrupt(INT_TA1_0);
-//    Interrupt_enableInterrupt(INT_PORT1);
-//    Interrupt_enableMaster();
-
     /* Configure command line interface */
     CLI_Configure();
 
@@ -592,26 +557,6 @@ int main(int argc, char** argv)
             CLI_Write(" MQTT failed to yield \n\r");
             LOOP_FOREVER();
         }
-
-//        if (publishID) {
-//            int rc = 0;
-//            MQTTMessage msg;
-//            msg.dup = 0;
-//            msg.id = 0;
-//            msg.payload = uniqueID;
-//            msg.payloadlen = 8;
-//            msg.qos = QOS0;
-//            msg.retained = 0;
-//            rc = MQTTPublish(&hMQTTClient, PUBLISH_TOPIC, &msg);
-//
-//            if (rc != 0) {
-//                CLI_Write(" Failed to publish unique ID to MQTT broker \n\r");
-//                LOOP_FOREVER();
-//            }
-//            CLI_Write(" Published unique ID successfully \n\r");
-//
-//            publishID = 0;
-//        }
 
         // Msg vars
         int payload_len;
@@ -753,15 +698,6 @@ static void messageArrived(MessageData* data) {
         stop_tach = 1;
     } else {
         CLI_Write(" Unacceptable Input");
-//        tok = strtok(buf, " ");
-//        color = strtol(tok, NULL, 10);
-//        TA0CCR1 = PWM_PERIOD * (color/255.0);                 // CCR1 PWM duty cycle
-//        tok = strtok(NULL, " ");
-//        color = strtol(tok, NULL, 10);
-//        TA0CCR2 = PWM_PERIOD * (color/255.0);                // CCR2 PWM duty cycle
-//        tok = strtok(NULL, " ");
-//        color = strtol(tok, NULL, 10);
-//        TA0CCR3 = PWM_PERIOD * (color/255.0);                  // CCR3 PWM duty cycle
     }
     return;
 }
