@@ -9,6 +9,7 @@
 "./PWM.obj"
 "./TA3InputCapture.obj"
 "./Tachometer.obj"
+"./UART0.obj"
 "./blinker.obj"
 "./fixed.obj"
 "./main.obj"

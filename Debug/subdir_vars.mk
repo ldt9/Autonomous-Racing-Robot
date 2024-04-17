@@ -20,6 +20,7 @@ C_SRCS += \
 ../PWM.c \
 ../TA3InputCapture.c \
 ../Tachometer.c \
+../UART0.c \
 ../blinker.c \
 ../fixed.c \
 ../main.c \
@@ -39,6 +40,7 @@ C_DEPS += \
 ./PWM.d \
 ./TA3InputCapture.d \
 ./Tachometer.d \
+./UART0.d \
 ./blinker.d \
 ./fixed.d \
 ./main.d \
@@ -58,6 +60,7 @@ OBJS += \
 ./PWM.obj \
 ./TA3InputCapture.obj \
 ./Tachometer.obj \
+./UART0.obj \
 ./blinker.obj \
 ./fixed.obj \
 ./main.obj \
@@ -77,6 +80,7 @@ OBJS__QUOTED += \
 "PWM.obj" \
 "TA3InputCapture.obj" \
 "Tachometer.obj" \
+"UART0.obj" \
 "blinker.obj" \
 "fixed.obj" \
 "main.obj" \
@@ -96,6 +100,7 @@ C_DEPS__QUOTED += \
 "PWM.d" \
 "TA3InputCapture.d" \
 "Tachometer.d" \
+"UART0.d" \
 "blinker.d" \
 "fixed.d" \
 "main.d" \
@@ -115,6 +120,7 @@ C_SRCS__QUOTED += \
 "../PWM.c" \
 "../TA3InputCapture.c" \
 "../Tachometer.c" \
+"../UART0.c" \
 "../blinker.c" \
 "../fixed.c" \
 "../main.c" \

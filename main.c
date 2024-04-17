@@ -71,6 +71,7 @@
 #include "LaunchPad.h"
 #include "Bump.h"
 #include "FFT.h"
+#include "UART0.h"
 
 uint16_t ActualL;                        // actual rotations per minute measured by tachometer
 uint16_t ActualR;                        // actual rotations per minute measured by tachometer
@@ -78,6 +79,7 @@ int i_tach = 0;
 int n_tach = 0;
 int stop_tach = 1;                       // The Motors have been stopped
 int wall_follow = 0;                       // wall following enabled
+int crashes = 0;                        // How many times the bump sensor was hit
 
 //uint16_t LeftDuty = 3750;                // duty cycle of left wheel (0 to 14,998)
 //uint16_t RightDuty = 3750;               // duty cycle of right wheel (0 to 14,998)
@@ -119,8 +121,12 @@ bool pollDistanceSensor(void)
  * SimpleLink device will connect to following AP when the application is executed
  */
 #define SSID_NAME       "Verizon_N3QTPV"       /* Access point name to connect to. */
+//#define SSID_NAME       "iPhone1"       /* Access point name to connect to. */
+//#define SSID_NAME       "ECE DESIGN LAB 2.4"       /* Access point name to connect to. */
 #define SEC_TYPE        SL_SEC_TYPE_WPA_WPA2     /* Security type of the Access piont */
 #define PASSKEY         "cud6-daisy-cps"   /* Password in case of secure AP */
+//#define PASSKEY         "myfavoritefood"   /* Password in case of secure AP */
+//#define PASSKEY         "ecedesignlab12345"   /* Password in case of secure AP */
 #define PASSKEY_LEN     pal_Strlen(PASSKEY)  /* Password length in case of secure AP */
 
 /*
@@ -243,7 +249,7 @@ static void generateUniqueID();
 void SimpleLinkWlanEventHandler(SlWlanEvent_t *pWlanEvent)
 {
     if(pWlanEvent == NULL)
-        CLI_Write(" [WLAN EVENT] NULL Pointer Error \n\r");
+        UART0_OutString(" [WLAN EVENT] NULL Pointer Error \n\r");
     
     switch(pWlanEvent->Event)
     {
@@ -275,18 +281,18 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *pWlanEvent)
             /* If the user has initiated 'Disconnect' request, 'reason_code' is SL_USER_INITIATED_DISCONNECTION */
             if(SL_USER_INITIATED_DISCONNECTION == pEventData->reason_code)
             {
-                CLI_Write(" Device disconnected from the AP on application's request \n\r");
+                UART0_OutString(" Device disconnected from the AP on application's request \n\r");
             }
             else
             {
-                CLI_Write(" Device disconnected from the AP on an ERROR..!! \n\r");
+                UART0_OutString(" Device disconnected from the AP on an ERROR..!! \n\r");
             }
         }
         break;
 
         default:
         {
-            CLI_Write(" [WLAN EVENT] Unexpected event \n\r");
+            UART0_OutString(" [WLAN EVENT] Unexpected event \n\r");
         }
         break;
     }
@@ -307,7 +313,7 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *pWlanEvent)
 void SimpleLinkNetAppEventHandler(SlNetAppEvent_t *pNetAppEvent)
 {
     if(pNetAppEvent == NULL)
-        CLI_Write(" [NETAPP EVENT] NULL Pointer Error \n\r");
+        UART0_OutString(" [NETAPP EVENT] NULL Pointer Error \n\r");
  
     switch(pNetAppEvent->Event)
     {
@@ -330,7 +336,7 @@ void SimpleLinkNetAppEventHandler(SlNetAppEvent_t *pNetAppEvent)
 
         default:
         {
-            CLI_Write(" [NETAPP EVENT] Unexpected event \n\r");
+            UART0_OutString(" [NETAPP EVENT] Unexpected event \n\r");
         }
         break;
     }
@@ -356,7 +362,7 @@ void SimpleLinkHttpServerCallback(SlHttpServerEvent_t *pHttpEvent,
      * This application doesn't work with HTTP server - Hence these
      * events are not handled here
      */
-    CLI_Write(" [HTTP EVENT] Unexpected event \n\r");
+    UART0_OutString(" [HTTP EVENT] Unexpected event \n\r");
 }
 
 /*!
@@ -372,7 +378,7 @@ void SimpleLinkGeneralEventHandler(SlDeviceEvent_t *pDevEvent)
      * Most of the general errors are not FATAL are are to be handled
      * appropriately by the application
      */
-    CLI_Write(" [GENERAL EVENT] \n\r");
+    UART0_OutString(" [GENERAL EVENT] \n\r");
 }
 
 /*!
@@ -385,7 +391,7 @@ void SimpleLinkGeneralEventHandler(SlDeviceEvent_t *pDevEvent)
 void SimpleLinkSockEventHandler(SlSockEvent_t *pSock)
 {
     if(pSock == NULL)
-        CLI_Write(" [SOCK EVENT] NULL Pointer Error \n\r");
+        UART0_OutString(" [SOCK EVENT] NULL Pointer Error \n\r");
 
     switch( pSock->Event )
     {
@@ -404,19 +410,19 @@ void SimpleLinkSockEventHandler(SlSockEvent_t *pSock)
             switch( pSock->EventData.status )
             {
                 case SL_ECLOSE:
-                    CLI_Write(" [SOCK EVENT] Close socket operation failed to transmit all queued packets\n\r");
+                    UART0_OutString(" [SOCK EVENT] Close socket operation failed to transmit all queued packets\n\r");
                 break;
 
 
                 default:
-                    CLI_Write(" [SOCK EVENT] Unexpected event \n\r");
+                    UART0_OutString(" [SOCK EVENT] Unexpected event \n\r");
                 break;
             }
         }
         break;
 
         default:
-            CLI_Write(" [SOCK EVENT] Unexpected event \n\r");
+            UART0_OutString(" [SOCK EVENT] Unexpected event \n\r");
         break;
     }
 }
@@ -498,6 +504,36 @@ void Controller_Right(void){ // runs at 100 Hz
         UR = PWMNOMINAL;
     }
 
+    int payload_len;
+    char *payload_str;
+
+    // Calculate the length of the payload string
+    payload_len = snprintf(NULL, 0, "{\"UL\": %d, \"UR\": %d}", UL, UR);
+
+    // Allocate memory for the payload string
+    payload_str = (char *)malloc(payload_len + 1); // +1 for null terminator
+
+    // Format the payload string
+    snprintf(payload_str, payload_len + 1, "{\"UL\": %d, \"UR\": %d}", UL, UR);
+
+    int rc = 0;
+    MQTTMessage msg;
+    msg.dup = 0;
+    msg.id = 0;
+    msg.payload = payload_str;
+    msg.payloadlen = payload_len;
+    msg.qos = QOS0;
+    msg.retained = 0;
+    rc = MQTTPublish(&hMQTTClient, PUBLISH_TOPIC, &msg);
+
+    if (rc != 0) {
+        UART0_OutString(payload_str);
+        UART0_OutString(" Failed to publish Commanded RPMs \n\r");
+    }
+
+    // Free the allocated memory for the payload string after publishing the message
+    free(payload_str);
+
     Motor_Forward(UL,UR);
 
   }
@@ -538,72 +574,72 @@ int32_t Left(int32_t left){
   return (1247*left)/2048 + 22;
 }
 
-void wallFollow(void){ // wallFollow wall following implementation
-  int i = 0;
-  uint32_t channel = 1;
-  DisableInterrupts();
-  Clock_Init48MHz();
-  Bump_Init();
-  LaunchPad_Init(); // built-in switches and LEDs
-  Motor_Stop(); // initialize and stop
-  Mode = 0;
-  I2CB1_Init(30); // baud rate = 12MHz/30=400kHz
-  CLI_Write("OPT3101\n\r");
-  CLI_Write("L=\n\r");
-  CLI_Write("C=\n\r");
-  CLI_Write("R=\n\r");
-  CLI_Write("Wall follow\n\r");
-  CLI_Write("SP=\n\r");
-  CLI_Write("Er=\n\r");
-  CLI_Write("U =\n\r");
-  OPT3101_Init();
-  OPT3101_Setup();
-  OPT3101_CalibrateInternalCrosstalk();
-  OPT3101_ArmInterrupts(&TxChannel, Distances, Amplitudes);
-  TxChannel = 3;
-  OPT3101_StartMeasurementChannel(channel);
-  LPF_Init(100,8);
-  LPF_Init2(100,8);
-  LPF_Init3(100,8);
-  UR = UL = PWMNOMINAL; //initial power
-  Pause();
-  EnableInterrupts();
-  while(1){
-    if(Bump_Read()){ // collision
-      Mode = 0;
-      Motor_Stop();
-      Pause();
-    }
-    if(TxChannel <= 2){ // 0,1,2 means new data
-      if(TxChannel==0){
-        if(Amplitudes[0] > 1000){
-          LeftDistance = FilteredDistances[0] = Left(LPF_Calc(Distances[0]));
-        }else{
-          LeftDistance = FilteredDistances[0] = 500;
-        }
-      }else if(TxChannel==1){
-        if(Amplitudes[1] > 1000){
-          CenterDistance = FilteredDistances[1] = LPF_Calc2(Distances[1]);
-        }else{
-          CenterDistance = FilteredDistances[1] = 500;
-        }
-      }else {
-        if(Amplitudes[2] > 1000){
-          RightDistance = FilteredDistances[2] = Right(LPF_Calc3(Distances[2]));
-        }else{
-          RightDistance = FilteredDistances[2] = 500;
-        }
-      }
-      TxChannel = 3; // 3 means no data
-      channel = (channel+1)%3;
-      OPT3101_StartMeasurementChannel(channel);
-      i = i + 1;
-    }
-    Controller_Right();
-
-    WaitForInterrupt();
-  }
-}
+//void wallFollow(void){ // wallFollow wall following implementation
+//  int i = 0;
+//  uint32_t channel = 1;
+//  DisableInterrupts();
+//  Clock_Init48MHz();
+//  Bump_Init();
+//  LaunchPad_Init(); // built-in switches and LEDs
+//  Motor_Stop(); // initialize and stop
+//  Mode = 0;
+//  I2CB1_Init(30); // baud rate = 12MHz/30=400kHz
+//  UART0_OutString("OPT3101\n\r");
+//  UART0_OutString("L=\n\r");
+//  UART0_OutString("C=\n\r");
+//  UART0_OutString("R=\n\r");
+//  UART0_OutString("Wall follow\n\r");
+//  UART0_OutString("SP=\n\r");
+//  UART0_OutString("Er=\n\r");
+//  UART0_OutString("U =\n\r");
+//  OPT3101_Init();
+//  OPT3101_Setup();
+//  OPT3101_CalibrateInternalCrosstalk();
+//  OPT3101_ArmInterrupts(&TxChannel, Distances, Amplitudes);
+//  TxChannel = 3;
+//  OPT3101_StartMeasurementChannel(channel);
+//  LPF_Init(100,8);
+//  LPF_Init2(100,8);
+//  LPF_Init3(100,8);
+//  UR = UL = PWMNOMINAL; //initial power
+//  Pause();
+//  EnableInterrupts();
+//  while(1){
+//    if(Bump_Read()){ // collision
+//      Mode = 0;
+//      Motor_Stop();
+//      Pause();
+//    }
+//    if(TxChannel <= 2){ // 0,1,2 means new data
+//      if(TxChannel==0){
+//        if(Amplitudes[0] > 1000){
+//          LeftDistance = FilteredDistances[0] = Left(LPF_Calc(Distances[0]));
+//        }else{
+//          LeftDistance = FilteredDistances[0] = 500;
+//        }
+//      }else if(TxChannel==1){
+//        if(Amplitudes[1] > 1000){
+//          CenterDistance = FilteredDistances[1] = LPF_Calc2(Distances[1]);
+//        }else{
+//          CenterDistance = FilteredDistances[1] = 500;
+//        }
+//      }else {
+//        if(Amplitudes[2] > 1000){
+//          RightDistance = FilteredDistances[2] = Right(LPF_Calc3(Distances[2]));
+//        }else{
+//          RightDistance = FilteredDistances[2] = 500;
+//        }
+//      }
+//      TxChannel = 3; // 3 means no data
+//      channel = (channel+1)%3;
+//      OPT3101_StartMeasurementChannel(channel);
+//      i = i + 1;
+//    }
+//    Controller_Right();
+//
+//    WaitForInterrupt();
+//  }
+//}
 
 /*
  * End Wall Follower Code
@@ -623,6 +659,7 @@ int main(int argc, char** argv)
     stopWDT();
 //    initClk();
     Clock_Init48MHz();
+    UART0_Init();
 
     // Initialize Motors
     Motor_Init();
@@ -644,11 +681,11 @@ int main(int argc, char** argv)
     SysTick->LOAD = 0x00FFFFFF;           // maximum reload value
     SysTick->CTRL = 0x00000005;           // enable SysTick with no interrupts
     I2CB1_Init(30); // baud rate = 12MHz/30=400kHz
-    OPT3101_Init();
-    OPT3101_Setup();
-    OPT3101_CalibrateInternalCrosstalk();
-    OPT3101_StartMeasurementChannel(channel);
-    StartTime = SysTick->VAL;
+//    OPT3101_Init();
+//    OPT3101_Setup();
+//    OPT3101_CalibrateInternalCrosstalk();
+//    OPT3101_StartMeasurementChannel(channel);
+//    StartTime = SysTick->VAL;
 
     // Init low pass filters and set power for pwm
     LPF_Init(100,8);
@@ -657,7 +694,7 @@ int main(int argc, char** argv)
     UR = UL = PWMNOMINAL; //initial power
 
     /* Configure command line interface */
-    CLI_Configure();
+//    CLI_Configure();
 
     displayBanner();
 
@@ -676,12 +713,12 @@ int main(int argc, char** argv)
     if(retVal < 0)
     {
         if (DEVICE_NOT_IN_STATION_MODE == retVal)
-            CLI_Write(" Failed to configure the device in its default state \n\r");
+            UART0_OutString(" Failed to configure the device in its default state \n\r");
 
         LOOP_FOREVER();
     }
 
-    CLI_Write(" Device is configured in default state \n\r");
+    UART0_OutString(" Device is configured in default state \n\r");
 
     /*
      * Assumption is that the device is configured in station mode already
@@ -691,21 +728,21 @@ int main(int argc, char** argv)
     if ((retVal < 0) ||
         (ROLE_STA != retVal) )
     {
-        CLI_Write(" Failed to start the device \n\r");
+        UART0_OutString(" Failed to start the device \n\r");
         LOOP_FOREVER();
     }
 
-    CLI_Write(" Device started as STATION \n\r");
+    UART0_OutString(" Device started as STATION \n\r");
 
     /* Connecting to WLAN AP */
     retVal = establishConnectionWithAP();
     if(retVal < 0)
     {
-        CLI_Write(" Failed to establish connection w/ an AP \n\r");
+        UART0_OutString(" Failed to establish connection w/ an AP \n\r");
         LOOP_FOREVER();
     }
 
-    CLI_Write(" Connection established w/ AP and IP is acquired \n\r");
+    UART0_OutString(" Connection established w/ AP and IP is acquired \n\r");
 
     // Obtain MAC Address
     sl_NetCfgGet(SL_MAC_ADDRESS_GET,NULL,&macAddressLen,(unsigned char *)macAddressVal);
@@ -725,10 +762,10 @@ int main(int argc, char** argv)
     rc = ConnectNetwork(&n, MQTT_BROKER_SERVER, 1883);
 
     if (rc != 0) {
-        CLI_Write(" Failed to connect to MQTT broker \n\r");
+        UART0_OutString(" Failed to connect to MQTT broker \n\r");
         LOOP_FOREVER();
     }
-    CLI_Write(" Connected to MQTT broker \n\r");
+    UART0_OutString(" Connected to MQTT broker \n\r");
 
     MQTTClient(&hMQTTClient, &n, 1000, buf, 100, readbuf, 100);
     MQTTPacket_connectData cdata = MQTTPacket_connectData_initializer;
@@ -737,26 +774,26 @@ int main(int argc, char** argv)
     rc = MQTTConnect(&hMQTTClient, &cdata);
 
     if (rc != 0) {
-        CLI_Write(" Failed to start MQTT client \n\r");
+        UART0_OutString(" Failed to start MQTT client \n\r");
         LOOP_FOREVER();
     }
-    CLI_Write(" Started MQTT client successfully \n\r");
+    UART0_OutString(" Started MQTT client successfully \n\r");
 
     rc = MQTTSubscribe(&hMQTTClient, SUBSCRIBE_TOPIC, QOS0, messageArrived);
 
     if (rc != 0) {
-        CLI_Write(" Failed to subscribe to /msp/cc3100/demo topic \n\r");
+        UART0_OutString(" Failed to subscribe to /msp/cc3100/demo topic \n\r");
         LOOP_FOREVER();
     }
-    CLI_Write(" Subscribed to /msp/cc3100/demo topic \n\r");
+    UART0_OutString(" Subscribed to /msp/cc3100/demo topic \n\r");
 
     rc = MQTTSubscribe(&hMQTTClient, uniqueID, QOS0, messageArrived);
 
     if (rc != 0) {
-        CLI_Write(" Failed to subscribe to uniqueID topic \n\r");
+        UART0_OutString(" Failed to subscribe to uniqueID topic \n\r");
         LOOP_FOREVER();
     }
-    CLI_Write(" Subscribed to uniqueID topic \n\r");
+    UART0_OutString(" Subscribed to uniqueID topic \n\r");
 
     // wait for bumper signal
 //    Pause();
@@ -764,7 +801,7 @@ int main(int argc, char** argv)
     while(1){
         rc = MQTTYield(&hMQTTClient, 10);
         if (rc != 0) {
-            CLI_Write(" MQTT failed to yield \n\r");
+            UART0_OutString(" MQTT failed to yield \n\r");
             LOOP_FOREVER();
         }
 
@@ -809,23 +846,24 @@ int main(int argc, char** argv)
             n_tach = n_tach % TACHBUFF;
 
             // Calculate the length of the payload string
-            payload_len = snprintf(NULL, 0, "{\"ActualL\": %d, \"ActualR\": %d, \"Distance0\": %d, \"Distance1\": %d, \"Distance2\": %d}", ActualL, ActualR, Distances[0], Distances[1], Distances[2]);
+            payload_len = snprintf(NULL, 0, "{\"AccL\": %d, \"AccR\": %d, \"D0\": %d, \"D1\": %d, \"D2\": %d, \"C\": %d}", ActualL, ActualR, Distances[0], Distances[1], Distances[2], crashes);
 
             // Allocate memory for the payload string
             payload_str = (char *)malloc(payload_len + 1); // +1 for null terminator
 
             // Format the payload string
-            snprintf(payload_str, payload_len + 1, "{\"ActualL\": %d, \"ActualR\": %d, \"Distance0\": %d, \"Distance1\": %d, \"Distance2\": %d}", ActualL, ActualR, Distances[0], Distances[1], Distances[2]);
-
+            snprintf(payload_str, payload_len + 1, "{\"AccL\": %d, \"AccR\": %d, \"D0\": %d, \"D1\": %d, \"D2\": %d, \"C\": %d}", ActualL, ActualR, Distances[0], Distances[1], Distances[2], crashes);
         } else {
             // Calculate the length of the payload string
-            payload_len = snprintf(NULL, 0, "{\"ActualL\": %d, \"ActualR\": %d, \"Distance0\": %d, \"Distance1\": %d, \"Distance2\": %d}", 0, 0, Distances[0], Distances[1], Distances[2]);
+            payload_len = snprintf(NULL, 0, "{\"AccL\": %d, \"AccR\": %d, \"D0\": %d, \"D1\": %d, \"D2\": %d, \"C\": %d}", 0, 0, Distances[0], Distances[1], Distances[2], crashes);
+//            payload_len = snprintf(NULL, 0, "{\"Crashes\": %d}", crashes);
 
             // Allocate memory for the payload string
             payload_str = (char *)malloc(payload_len + 1); // +1 for null terminator
 
             // Format the payload string
-            snprintf(payload_str, payload_len + 1, "{\"ActualL\": %d, \"ActualR\": %d, \"Distance0\": %d, \"Distance1\": %d, \"Distance2\": %d}", 0, 0, Distances[0], Distances[1], Distances[2]);
+            snprintf(payload_str, payload_len + 1, "{\"AccL\": %d, \"AccR\": %d, \"D0\": %d, \"D1\": %d, \"D2\": %d, \"C\": %d}", 0, 0, Distances[0], Distances[1], Distances[2], crashes);
+//            snprintf(payload_str, payload_len + 1, "{\"Crashes\": %d}", crashes);
         }
 
         int rc = 0;
@@ -839,7 +877,9 @@ int main(int argc, char** argv)
         rc = MQTTPublish(&hMQTTClient, PUBLISH_TOPIC, &msg);
 
         if (rc != 0) {
-            CLI_Write(" Failed to publish Distances to MQTT broker \n\r");
+            UART0_OutString(payload_str);
+            UART0_OutString(" Failed to publish Distances to MQTT broker \n\r");
+            break;
         }
 
         // Free the allocated memory for the payload string after publishing the message
@@ -851,6 +891,7 @@ int main(int argc, char** argv)
           Mode = 0;
           stop_tach = 1;
           Motor_Stop();
+          crashes++;
           Pause();
         }
         if (wall_follow){
@@ -880,6 +921,8 @@ int main(int argc, char** argv)
               i = i + 1;
             }
             Controller_Right();
+
+            WaitForInterrupt();
         }
     }
 }
@@ -931,8 +974,8 @@ static void messageArrived(MessageData* data) {
     buf[data->message->payloadlen] = 0;
 
     tok = strtok(buf, " ");
-    CLI_Write(tok);
-    CLI_Write("\n\r");
+    UART0_OutString(tok);
+    UART0_OutString("\n\r");
 
     if (strcmp(tok, "go") == 0) {
         wall_follow = 1;
@@ -941,8 +984,9 @@ static void messageArrived(MessageData* data) {
         Motor_Stop();
         wall_follow = 0;
         stop_tach = 1;
+//        Pause();
     } else {
-        CLI_Write(" Unacceptable Input");
+        UART0_OutString(" Unacceptable Input");
     }
     return;
 }
@@ -976,9 +1020,9 @@ void PORT1_IRQHandler(void)
         {
             S2buttonDebounce = 1;
 
-            CLI_Write(" MAC Address: \n\r ");
-            CLI_Write(macStr);
-            CLI_Write("\n\r");
+            UART0_OutString(" MAC Address: \n\r ");
+            UART0_OutString(macStr);
+            UART0_OutString("\n\r");
 
             MAP_Timer_A_startCounter(TIMER_A1_BASE, TIMER_A_UP_MODE);
         }
@@ -1186,10 +1230,10 @@ static _i32 initializeAppVariables()
 */
 static void displayBanner()
 {
-    CLI_Write("\n\r\n\r");
-    CLI_Write(" MQTT Twitter Controlled RGB LED - Version ");
-    CLI_Write(APPLICATION_VERSION);
-    CLI_Write("\n\r*******************************************************************************\n\r");
+    UART0_OutString("\n\r\n\r");
+    UART0_OutString(" MQTT Twitter Controlled RGB LED - Version ");
+    UART0_OutString(APPLICATION_VERSION);
+    UART0_OutString("\n\r*******************************************************************************\n\r");
 }
 
 
