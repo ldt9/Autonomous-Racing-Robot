@@ -522,11 +522,12 @@ void Pause(void){int i;
   while(Bump_Read()==0x3F){ // wait for release
     Clock_Delay1ms(100); LaunchPad_Output(0); // off
     Clock_Delay1ms(100); LaunchPad_Output(4); // blue
+    LaunchPad_Output(2); // green
   }
-  for(i=1000;i>100;i=i-200){
-    Clock_Delay1ms(i); LaunchPad_Output(0); // off
-    Clock_Delay1ms(i); LaunchPad_Output(2); // green
-  }
+//  for(i=1000;i>100;i=i-200){
+//    Clock_Delay1ms(i); LaunchPad_Output(0); // off
+//    Clock_Delay1ms(i); LaunchPad_Output(2); // green
+//  }
   // restart Jacki
   UR = UL = PWMNOMINAL;    // reset parameters
   Mode = 1;
