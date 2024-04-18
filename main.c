@@ -135,6 +135,7 @@ bool pollDistanceSensor(void)
 #define MQTT_BROKER_SERVER  "broker.hivemq.com"
 #define SUBSCRIBE_TOPIC "Lab6MQTT"
 #define PUBLISH_TOPIC "AzureLab6"
+#define PUBLISH_TOPIC2 "AzureLab62"
 
 // MQTT message buffer size
 #define BUFF_SIZE 32
@@ -437,8 +438,8 @@ void SimpleLinkSockEventHandler(SlSockEvent_t *pSock)
 // assumes track is 500mm
 int32_t Mode=0; // 0 stop, 1 run
 int32_t Error;
-int32_t Ki=1;  // integral controller gain
-int32_t Kp=4;  // proportional controller gain //was 4
+float Ki=0.75;  // integral controller gain
+float Kp=4;  // proportional controller gain //was 4
 int32_t UR, UL;  // PWM duty 0 to 14,998
 
 #define TOOCLOSE 200 //was 200
@@ -447,8 +448,8 @@ int32_t SetPoint = 250; // mm //was 250
 int32_t LeftDistance,CenterDistance,RightDistance; // mm
 #define TOOFAR 400 // was 400
 
-#define PWMNOMINAL 5000 // was 2500
-#define SWING 2000 //was 1000
+int PWMNOMINAL = 7000; // was 2500
+int SWING = 2000; //was 1000
 #define PWMMIN (PWMNOMINAL-SWING)
 #define PWMMAX (PWMNOMINAL+SWING)
 void Controller(void){ // runs at 100 Hz
@@ -504,36 +505,6 @@ void Controller_Right(void){ // runs at 100 Hz
         UR = PWMNOMINAL;
     }
 
-    int payload_len;
-    char *payload_str;
-
-    // Calculate the length of the payload string
-    payload_len = snprintf(NULL, 0, "{\"UL\": %d, \"UR\": %d}", UL, UR);
-
-    // Allocate memory for the payload string
-    payload_str = (char *)malloc(payload_len + 1); // +1 for null terminator
-
-    // Format the payload string
-    snprintf(payload_str, payload_len + 1, "{\"UL\": %d, \"UR\": %d}", UL, UR);
-
-    int rc = 0;
-    MQTTMessage msg;
-    msg.dup = 0;
-    msg.id = 0;
-    msg.payload = payload_str;
-    msg.payloadlen = payload_len;
-    msg.qos = QOS0;
-    msg.retained = 0;
-    rc = MQTTPublish(&hMQTTClient, PUBLISH_TOPIC, &msg);
-
-    if (rc != 0) {
-        UART0_OutString(payload_str);
-        UART0_OutString(" Failed to publish Commanded RPMs \n\r");
-    }
-
-    // Free the allocated memory for the payload string after publishing the message
-    free(payload_str);
-
     Motor_Forward(UL,UR);
 
   }
@@ -574,76 +545,31 @@ int32_t Left(int32_t left){
   return (1247*left)/2048 + 22;
 }
 
-//void wallFollow(void){ // wallFollow wall following implementation
-//  int i = 0;
-//  uint32_t channel = 1;
-//  DisableInterrupts();
-//  Clock_Init48MHz();
-//  Bump_Init();
-//  LaunchPad_Init(); // built-in switches and LEDs
-//  Motor_Stop(); // initialize and stop
-//  Mode = 0;
-//  I2CB1_Init(30); // baud rate = 12MHz/30=400kHz
-//  UART0_OutString("OPT3101\n\r");
-//  UART0_OutString("L=\n\r");
-//  UART0_OutString("C=\n\r");
-//  UART0_OutString("R=\n\r");
-//  UART0_OutString("Wall follow\n\r");
-//  UART0_OutString("SP=\n\r");
-//  UART0_OutString("Er=\n\r");
-//  UART0_OutString("U =\n\r");
-//  OPT3101_Init();
-//  OPT3101_Setup();
-//  OPT3101_CalibrateInternalCrosstalk();
-//  OPT3101_ArmInterrupts(&TxChannel, Distances, Amplitudes);
-//  TxChannel = 3;
-//  OPT3101_StartMeasurementChannel(channel);
-//  LPF_Init(100,8);
-//  LPF_Init2(100,8);
-//  LPF_Init3(100,8);
-//  UR = UL = PWMNOMINAL; //initial power
-//  Pause();
-//  EnableInterrupts();
-//  while(1){
-//    if(Bump_Read()){ // collision
-//      Mode = 0;
-//      Motor_Stop();
-//      Pause();
-//    }
-//    if(TxChannel <= 2){ // 0,1,2 means new data
-//      if(TxChannel==0){
-//        if(Amplitudes[0] > 1000){
-//          LeftDistance = FilteredDistances[0] = Left(LPF_Calc(Distances[0]));
-//        }else{
-//          LeftDistance = FilteredDistances[0] = 500;
-//        }
-//      }else if(TxChannel==1){
-//        if(Amplitudes[1] > 1000){
-//          CenterDistance = FilteredDistances[1] = LPF_Calc2(Distances[1]);
-//        }else{
-//          CenterDistance = FilteredDistances[1] = 500;
-//        }
-//      }else {
-//        if(Amplitudes[2] > 1000){
-//          RightDistance = FilteredDistances[2] = Right(LPF_Calc3(Distances[2]));
-//        }else{
-//          RightDistance = FilteredDistances[2] = 500;
-//        }
-//      }
-//      TxChannel = 3; // 3 means no data
-//      channel = (channel+1)%3;
-//      OPT3101_StartMeasurementChannel(channel);
-//      i = i + 1;
-//    }
-//    Controller_Right();
-//
-//    WaitForInterrupt();
-//  }
-//}
-
 /*
  * End Wall Follower Code
  */
+
+// Function to publish MQTT message
+void publishMQTTMessage(char *payload_str, int payload_len, int topic) {
+    int rc = 0;
+    MQTTMessage msg;
+    msg.dup = 0;
+    msg.id = 0;
+    msg.payload = payload_str;
+    msg.payloadlen = payload_len;
+    msg.qos = QOS0;
+    msg.retained = 0;
+    if (topic == 1){
+        rc = MQTTPublish(&hMQTTClient, PUBLISH_TOPIC, &msg);
+    } else {
+        rc = MQTTPublish(&hMQTTClient, PUBLISH_TOPIC2, &msg);
+    }
+    if (rc != 0) {
+        UART0_OutString(payload_str);
+        UART0_OutString(" Failed to publish Distances to MQTT broker \n\r");
+    }
+    free(payload_str); // Free the allocated memory for the payload string after publishing the message
+}
 
 /*
  * Application's entry point
@@ -675,17 +601,20 @@ int main(int argc, char** argv)
 
     // Set Mode to Stop
     int i;
+    int k;
     Mode = 0;
 
     // Init Distance Sensor
     SysTick->LOAD = 0x00FFFFFF;           // maximum reload value
     SysTick->CTRL = 0x00000005;           // enable SysTick with no interrupts
     I2CB1_Init(30); // baud rate = 12MHz/30=400kHz
-//    OPT3101_Init();
-//    OPT3101_Setup();
-//    OPT3101_CalibrateInternalCrosstalk();
-//    OPT3101_StartMeasurementChannel(channel);
-//    StartTime = SysTick->VAL;
+    OPT3101_Init();
+    OPT3101_Setup();
+    OPT3101_CalibrateInternalCrosstalk();
+    OPT3101_StartMeasurementChannel(channel);
+    StartTime = SysTick->VAL;
+
+    UART0_OutString(" Distance Sensor Init \n\r");
 
     // Init low pass filters and set power for pwm
     LPF_Init(100,8);
@@ -806,8 +735,10 @@ int main(int argc, char** argv)
         }
 
         // Msg vars
-        int payload_len;
-        char *payload_str;
+        int payload_len1;
+        char *payload_str1;
+        int payload_len2;
+        char *payload_str2;
 
         // Send State of Distance Sensors
         if(pollDistanceSensor())
@@ -846,44 +777,41 @@ int main(int argc, char** argv)
             n_tach = n_tach % TACHBUFF;
 
             // Calculate the length of the payload string
-            payload_len = snprintf(NULL, 0, "{\"AccL\": %d, \"AccR\": %d, \"D0\": %d, \"D1\": %d, \"D2\": %d, \"C\": %d}", ActualL, ActualR, Distances[0], Distances[1], Distances[2], crashes);
+            payload_len1 = snprintf(NULL, 0, "{\"AL\": %d, \"AR\": %d, \"D0\": %d, \"D1\": %d, \"D2\": %d}", ActualL, ActualR, Distances[0], Distances[1], Distances[2]);
 
             // Allocate memory for the payload string
-            payload_str = (char *)malloc(payload_len + 1); // +1 for null terminator
+            payload_str1 = (char *)malloc(payload_len1 + 1); // +1 for null terminator
 
             // Format the payload string
-            snprintf(payload_str, payload_len + 1, "{\"AccL\": %d, \"AccR\": %d, \"D0\": %d, \"D1\": %d, \"D2\": %d, \"C\": %d}", ActualL, ActualR, Distances[0], Distances[1], Distances[2], crashes);
+            snprintf(payload_str1, payload_len1 + 1, "{\"AL\": %d, \"AR\": %d, \"D0\": %d, \"D1\": %d, \"D2\": %d}", ActualL, ActualR, Distances[0], Distances[1], Distances[2]);
+
         } else {
             // Calculate the length of the payload string
-            payload_len = snprintf(NULL, 0, "{\"AccL\": %d, \"AccR\": %d, \"D0\": %d, \"D1\": %d, \"D2\": %d, \"C\": %d}", 0, 0, Distances[0], Distances[1], Distances[2], crashes);
-//            payload_len = snprintf(NULL, 0, "{\"Crashes\": %d}", crashes);
+            payload_len1 = snprintf(NULL, 0, "{\"AL\": %d, \"AR\": %d, \"D0\": %d, \"D1\": %d, \"D2\": %d}", 0, 0, Distances[0], Distances[1], Distances[2]);
 
             // Allocate memory for the payload string
-            payload_str = (char *)malloc(payload_len + 1); // +1 for null terminator
+            payload_str1 = (char *)malloc(payload_len1 + 1); // +1 for null terminator
 
             // Format the payload string
-            snprintf(payload_str, payload_len + 1, "{\"AccL\": %d, \"AccR\": %d, \"D0\": %d, \"D1\": %d, \"D2\": %d, \"C\": %d}", 0, 0, Distances[0], Distances[1], Distances[2], crashes);
-//            snprintf(payload_str, payload_len + 1, "{\"Crashes\": %d}", crashes);
+            snprintf(payload_str1, payload_len1 + 1, "{\"AL\": %d, \"AR\": %d, \"D0\": %d, \"D1\": %d, \"D2\": %d}", 0, 0, Distances[0], Distances[1], Distances[2]);
         }
 
-        int rc = 0;
-        MQTTMessage msg;
-        msg.dup = 0;
-        msg.id = 0;
-        msg.payload = payload_str;
-        msg.payloadlen = payload_len;
-        msg.qos = QOS0;
-        msg.retained = 0;
-        rc = MQTTPublish(&hMQTTClient, PUBLISH_TOPIC, &msg);
+        // Calculate the length of the payload string
+        payload_len2 = snprintf(NULL, 0, "{\"C\": %d, \"KP\": %2.1f, \"KI\": %2.1f, \"PWM\": %d, \"SWG\": %d}", crashes, Kp, Ki, PWMNOMINAL, SWING);
 
-        if (rc != 0) {
-            UART0_OutString(payload_str);
-            UART0_OutString(" Failed to publish Distances to MQTT broker \n\r");
-            break;
-        }
+        // Allocate memory for the payload string
+        payload_str2 = (char *)malloc(payload_len2 + 1); // +1 for null terminator
 
-        // Free the allocated memory for the payload string after publishing the message
-        free(payload_str);
+        // Format the payload string
+        snprintf(payload_str2, payload_len2 + 1, "{\"C\": %d, \"KP\": %2.1f, \"KI\": %2.1f, \"PWM\": %d, \"SWG\": %d}", crashes, Kp, Ki, PWMNOMINAL, SWING);
+
+//        if (k > 10){
+            // Send MQTT Messages
+            publishMQTTMessage(payload_str1, payload_len1, 1);
+            publishMQTTMessage(payload_str2, payload_len2, 2);
+            k = 0;
+//        }
+        k+=1;
 
 //        Delay(10);
 
@@ -894,7 +822,7 @@ int main(int argc, char** argv)
           crashes++;
           Pause();
         }
-        if (wall_follow){
+//        if (wall_follow){
             if(TxChannel <= 2){ // 0,1,2 means new data
               if(TxChannel==0){
                 if(Amplitudes[0] > 1000){
@@ -922,8 +850,8 @@ int main(int argc, char** argv)
             }
             Controller_Right();
 
-            WaitForInterrupt();
-        }
+//            WaitForInterrupt();
+//        }
     }
 }
 
@@ -985,6 +913,22 @@ static void messageArrived(MessageData* data) {
         wall_follow = 0;
         stop_tach = 1;
 //        Pause();
+    } else if (strcmp(buf, "kp+") == 0) {
+        Kp+=0.25;
+    } else if (strcmp(buf, "kp-") == 0) {
+        Kp-=0.25;
+    } else if (strcmp(buf, "ki+") == 0) {
+        Ki+=0.25;
+    } else if (strcmp(buf, "ki-") == 0) {
+        Ki-=0.25;
+    } else if (strcmp(buf, "pwm+") == 0) {
+        PWMNOMINAL+=500;
+    } else if (strcmp(buf, "pwm-") == 0) {
+        PWMNOMINAL-=500;
+    } else if (strcmp(buf, "swg+") == 0) {
+        SWING+=500;
+    } else if (strcmp(buf, "swg-") == 0) {
+        SWING-=500;
     } else {
         UART0_OutString(" Unacceptable Input");
     }
