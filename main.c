@@ -56,6 +56,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include <time.h>
 
 #include "driverlib.h"
 #include "simplelink.h"
@@ -72,9 +74,20 @@
 #include "Bump.h"
 #include "FFT.h"
 #include "UART0.h"
+#include "Reflectance.h"
+#include "EUSCIA0.h"
+#include "FIFO0.h"
+
+
+
 
 uint16_t ActualL;                        // actual rotations per minute measured by tachometer
 uint16_t ActualR;                        // actual rotations per minute measured by tachometer
+uint16_t max_speed = 0.0;                //variable to keep track of max speed
+time_t inital_seconds;              //variable to get track time
+time_t lap_seconds;
+int record_time = 0;
+int track_time;
 int i_tach = 0;
 int n_tach = 0;
 int stop_tach = 1;                       // The Motors have been stopped
@@ -120,13 +133,13 @@ bool pollDistanceSensor(void)
  * Values for below macros shall be modified per the access-point's (AP) properties
  * SimpleLink device will connect to following AP when the application is executed
  */
-#define SSID_NAME       "Verizon_N3QTPV"       /* Access point name to connect to. */
+//#define SSID_NAME       "Verizon_N3QTPV"       /* Access point name to connect to. */
 //#define SSID_NAME       "iPhone1"       /* Access point name to connect to. */
-//#define SSID_NAME       "ECE DESIGN LAB 2.4"       /* Access point name to connect to. */
+#define SSID_NAME       "ECE DESIGN LAB 2.4"       /* Access point name to connect to. */
 #define SEC_TYPE        SL_SEC_TYPE_WPA_WPA2     /* Security type of the Access piont */
-#define PASSKEY         "cud6-daisy-cps"   /* Password in case of secure AP */
+//#define PASSKEY         "cud6-daisy-cps"   /* Password in case of secure AP */
 //#define PASSKEY         "myfavoritefood"   /* Password in case of secure AP */
-//#define PASSKEY         "ecedesignlab12345"   /* Password in case of secure AP */
+#define PASSKEY         "ecedesignlab12345"   /* Password in case of secure AP */
 #define PASSKEY_LEN     pal_Strlen(PASSKEY)  /* Password length in case of secure AP */
 
 /*
@@ -136,6 +149,10 @@ bool pollDistanceSensor(void)
 #define SUBSCRIBE_TOPIC "Lab6MQTT"
 #define PUBLISH_TOPIC "AzureLab6"
 #define PUBLISH_TOPIC2 "AzureLab62"
+#define PUBLISH_TOPIC3 "MaxSpeed"
+#define PUBLISH_TOPIC4 "Timer"
+#define PUBLISH_TOPIC5 "RESET"
+
 
 // MQTT message buffer size
 #define BUFF_SIZE 32
@@ -427,6 +444,7 @@ void SimpleLinkSockEventHandler(SlSockEvent_t *pSock)
         break;
     }
 }
+
 /*
  * ASYNCHRONOUS EVENT HANDLERS -- End
  */
@@ -440,6 +458,8 @@ int32_t Mode=0; // 0 stop, 1 run
 int32_t Error;
 float Ki=0.75;  // integral controller gain
 float Kp=4;  // proportional controller gain //was 4
+//float Ki= 10000;  //integral gain for John's RoboBoy
+//float Kp = 20; //p gain for John's RoboBoy
 int32_t UR, UL;  // PWM duty 0 to 14,998
 
 #define TOOCLOSE 200 //was 200
@@ -448,8 +468,10 @@ int32_t SetPoint = 250; // mm //was 250
 int32_t LeftDistance,CenterDistance,RightDistance; // mm
 #define TOOFAR 400 // was 400
 
-int PWMNOMINAL = 7000; // was 2500
-int SWING = 2000; //was 1000
+//int PWMNOMINAL = 7000; // was 2500
+int PWMNOMINAL = 2500; // was 2500
+//int SWING = 2000; //was 1000
+int SWING = 1000; //was 1000
 #define PWMMIN (PWMNOMINAL-SWING)
 #define PWMMAX (PWMNOMINAL+SWING)
 void Controller(void){ // runs at 100 Hz
@@ -524,10 +546,10 @@ void Pause(void){int i;
     Clock_Delay1ms(100); LaunchPad_Output(4); // blue
     LaunchPad_Output(2); // green
   }
-//  for(i=1000;i>100;i=i-200){
-//    Clock_Delay1ms(i); LaunchPad_Output(0); // off
-//    Clock_Delay1ms(i); LaunchPad_Output(2); // green
-//  }
+  for(i=1000;i>100;i=i-200){
+    Clock_Delay1ms(i); LaunchPad_Output(0); // off
+    Clock_Delay1ms(i); LaunchPad_Output(2); // green
+  }
   // restart Jacki
   UR = UL = PWMNOMINAL;    // reset parameters
   Mode = 1;
@@ -562,7 +584,7 @@ void publishMQTTMessage(char *payload_str, int payload_len, int topic) {
     msg.retained = 0;
     if (topic == 1){
         rc = MQTTPublish(&hMQTTClient, PUBLISH_TOPIC, &msg);
-    } else {
+    } else if(topic == 2) {
         rc = MQTTPublish(&hMQTTClient, PUBLISH_TOPIC2, &msg);
     }
     if (rc != 0) {
@@ -572,6 +594,60 @@ void publishMQTTMessage(char *payload_str, int payload_len, int topic) {
     free(payload_str); // Free the allocated memory for the payload string after publishing the message
 }
 
+void publishMQTTMessagePublishThree(char *payload_str, int payload_len, int topic){
+    int rc = 0;
+    MQTTMessage msg;
+    msg.dup = 0;
+    msg.id = 0;
+    msg.payload = payload_str;
+    msg.payloadlen = payload_len;
+    msg.qos = QOS0;
+    msg.retained = 0;
+    if(topic == 1){
+        rc = MQTTPublish(&hMQTTClient, PUBLISH_TOPIC3, &msg);
+    }
+    else if(topic == 2){
+        rc = MQTTPublish(&hMQTTClient, PUBLISH_TOPIC4, &msg);
+    }
+    else if(topic == 3){
+        rc = MQTTPublish(&hMQTTClient, PUBLISH_TOPIC5, &msg);
+    }
+
+    if (rc != 0) {
+        UART0_OutString(payload_str);
+        UART0_OutString(" Failed to publish Distances to MQTT broker \n\r");
+    }
+    free(payload_str);
+
+}
+/*
+void UART0_RX_IRQHandler(void) {
+    // Check if the interrupt was triggered by receiving a character
+    if () {
+        // Clear the interrupt flag
+        // Read the received character
+        char x;
+        x = UART0_InChar();
+
+        if(x == 'f'){
+            if(first == 0){
+                time(&inital_seconds);
+                first = 1;
+            }
+            UART0_OutString("Forward");
+            wall_follow = 1;
+            stop_tach = 0;
+        }
+        else if(x == 's'){
+            UART0_OutString("Stop");
+            Motor_Stop();
+            wall_follow = 0;
+            stop_tach = 1;
+        }
+        Clock_Delay1ms(1);
+    }
+}
+*/
 /*
  * Application's entry point
  */
@@ -600,11 +676,17 @@ int main(int argc, char** argv)
     // Init Launch Pad
     LaunchPad_Init(); // built-in switches and LEDs
 
+    Reflectance_Init();
+
+//    EUSCIA0_Init();
+    //Enable_Interrupts();
+
     // Set Mode to Stop
     int i;
     int k;
     Mode = 0;
-
+    int first = 0;
+    int all_white = 0;
     // Init Distance Sensor
     SysTick->LOAD = 0x00FFFFFF;           // maximum reload value
     SysTick->CTRL = 0x00000005;           // enable SysTick with no interrupts
@@ -728,7 +810,9 @@ int main(int argc, char** argv)
     // wait for bumper signal
 //    Pause();
 
+
     while(1){
+
         rc = MQTTYield(&hMQTTClient, 10);
         if (rc != 0) {
             UART0_OutString(" MQTT failed to yield \n\r");
@@ -740,15 +824,78 @@ int main(int argc, char** argv)
         char *payload_str1;
         int payload_len2;
         char *payload_str2;
+        int payload_len3;
+        char *payload_str3;
+        int payload_len4;
+        char *payload_str4;
 
         // Send State of Distance Sensors
         if(pollDistanceSensor())
         {
+
           TimeToConvert = ((StartTime-SysTick->VAL)&0x00FFFFFF)/48000; // msec
           channel = (channel+1)%3;
           OPT3101_StartMeasurementChannel(channel);
           StartTime = SysTick->VAL;
         }
+
+
+
+        ///Bluetooth Start and Stop
+
+        char x;
+
+         x = UART0_InChar();
+
+        if(x == 'f'){
+            if(first == 0){
+                //time(&inital_seconds);
+                first = 1;
+                record_time = 1;
+            }
+            UART0_OutString("Forward");
+            wall_follow = 1;
+            stop_tach = 0;
+            Mode = 1;
+
+        }
+        else if(x == 's'){
+            UART0_OutString("Stop");
+            Motor_Stop();
+            wall_follow = 0;
+            stop_tach = 1;
+            Mode = 1;
+        }
+
+        //}
+
+
+        Clock_Delay1ms(1);
+
+        if(first != 2){
+            if(all_white == 0 && 0x00 == Reflectance_Read(1000)){
+                all_white = 1;
+            }
+            if(all_white == 1){
+                if(0x00 != Reflectance_Read(1000)){
+                    UART0_OutString("Finished");
+                    Motor_Stop();
+
+                    wall_follow = 0;
+                    stop_tach = 1;
+                    if(first == 1){
+                        //time(&lap_seconds);
+                        //track_time = lap_seconds - inital_seconds
+                        first = 2;
+                        record_time = 2;
+                    }
+                }
+            }
+        }
+
+
+
+
 
         // Capture Motor RPMs
         if (stop_tach == 0) {
@@ -806,13 +953,75 @@ int main(int argc, char** argv)
         // Format the payload string
         snprintf(payload_str2, payload_len2 + 1, "{\"C\": %d, \"KP\": %2.1f, \"KI\": %2.1f, \"PWM\": %d, \"SWG\": %d}", crashes, Kp, Ki, PWMNOMINAL, SWING);
 
+
+
+        if(((ActualL + ActualR)/2) > max_speed){
+            max_speed = ActualL + ActualR;
+        }
+
+
+
+        payload_len3 = snprintf(NULL, 0, "{\"ms\": %d}", max_speed);
+
+        payload_str3 = (char *)malloc(payload_len3 + 1); // +1 for null terminator
+
+
+        snprintf(payload_str3, payload_len3 + 1, "{\"ms\": %d}", max_speed);
+
+
+        if(record_time == 1){
+            payload_len4 = snprintf(NULL, 0, "Record");
+
+            payload_str4 = (char *)malloc(payload_len4 + 1); // +1 for null terminator
+
+
+            snprintf(payload_str4, payload_len4 + 1, "Record");
+
+            publishMQTTMessagePublishThree(payload_str4, payload_len4, 2);
+            record_time = 1;
+
+
+        }
+        else if(record_time == 2){
+            payload_len4 = snprintf(NULL, 0, "Stop");
+
+            payload_str4 = (char *)malloc(payload_len4 + 1); // +1 for null terminator
+
+
+            snprintf(payload_str4, payload_len4 + 1, "Stop");
+
+            publishMQTTMessagePublishThree(payload_str4, payload_len4, 2);
+
+            Clock_Delay1ms(5000);
+            record_time = 4;
+
+        }
+        else if(record_time == 4){
+            payload_len4 = snprintf(NULL, 0, "RESET");
+
+            payload_str4 = (char *)malloc(payload_len4 + 1); // +1 for null terminator
+
+
+            snprintf(payload_str4, payload_len4 + 1, "RESET");
+
+            publishMQTTMessagePublishThree(payload_str4, payload_len4, 3);
+
+            record_time = 7;
+
+        }
+
+
+
+
 //        if (k > 10){
             // Send MQTT Messages
             publishMQTTMessage(payload_str1, payload_len1, 1);
             publishMQTTMessage(payload_str2, payload_len2, 2);
+            publishMQTTMessagePublishThree(payload_str3, payload_len3, 1);
             k = 0;
 //        }
         k+=1;
+
 
 //        Delay(10);
 
@@ -823,7 +1032,7 @@ int main(int argc, char** argv)
           crashes++;
           Pause();
         }
-//        if (wall_follow){
+        if (wall_follow){
             if(TxChannel <= 2){ // 0,1,2 means new data
               if(TxChannel==0){
                 if(Amplitudes[0] > 1000){
@@ -852,8 +1061,9 @@ int main(int argc, char** argv)
             Controller_Right();
 
 //            WaitForInterrupt();
-//        }
+        }
     }
+
 }
 
 static void generateUniqueID() {
@@ -1180,5 +1390,3 @@ static void displayBanner()
     UART0_OutString(APPLICATION_VERSION);
     UART0_OutString("\n\r*******************************************************************************\n\r");
 }
-
-
