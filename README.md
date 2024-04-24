@@ -30,8 +30,8 @@ This is an autonomous robot capable of following walls using proximity sensors a
    - Assemble the robot chassis with the motors, sensors, and Wi-Fi module according to the provided instructions.
 
 2. **Software Installation**:
-   - Install Energia IDE on your development machine.
-   - Set up TI-RTOS and SimpleLink SDK according to their documentation.
+   - Install Code Composer Studio IDE on your development machine.
+   - Set up a server on Azure to host the NodeRed application to deploy the flow for the robot's dashboard
    - Install the MQTT client library and Optical Distance Sensor library.
 
 3. **Project Configuration**:
@@ -42,7 +42,7 @@ This is an autonomous robot capable of following walls using proximity sensors a
    - Configure the Wi-Fi module to connect to your local Wi-Fi network. Update the SSID and password in the source code.
 
 5. **Compile and Upload**:
-   - Compile the source code in Energia IDE.
+   - Compile the source code in Code Composer Studio IDE.
    - Upload the compiled binary to the microcontroller.
 
 6. **Run the Program**:
